@@ -1,0 +1,5 @@
+networkx[default]
+python_gedcom_2
+pygraphviz
+pydot
+matplotlib
