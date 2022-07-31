@@ -1,13 +1,60 @@
-from copy import deepcopy
+"""
+Create the edges and nodes for the graph
+
+Gedcom tags:
+https://www.tamurajones.net/GEDCOMTags.xhtml
+"""
+import dataclasses
+from datetime import datetime
+from enum import Enum
+from typing import Optional, Tuple
+import unidecode
+from dateutil.parser import parse, ParserError
 
 from python_gedcom_2.element.family import FamilyElement
 from python_gedcom_2.element.individual import IndividualElement
 from python_gedcom_2.parser import Parser
-import networkx as nx
-from itertools import combinations
+
+import logging
+logger = logging.getLogger()
 
 # Path to your ".ged" file
 gen_file_path = '../data/Lanaja_2021_v4.ged'
+
+
+@dataclasses.dataclass
+class Person:
+    id: str
+    name: str
+    birth_date: Optional[str]
+    birth_place: Optional[str]
+    death_date: Optional[str]
+    death_place: Optional[str]
+    gender: Optional[str]
+
+    def __str__(self):
+        return f"{self.name} {self.id}"
+
+
+@dataclasses.dataclass
+class Edge:
+    """
+    An edge in the graph
+    """
+    source: str
+    target: str
+    type: str
+
+    def __str__(self):
+        return f"{self.source} {self.target} {self.type}"
+
+
+class EdgeType(Enum):
+    """
+    Edge types
+    """
+    CHILDREN = "children"
+    SPOUSE = "spouse"
 
 
 def get_children(element, gedcom_parser):
@@ -20,7 +67,49 @@ def get_children(element, gedcom_parser):
     return individuals
 
 
-def get_edges_nodes():
+
+def parse_date(date_string: str)->datetime:
+    """
+    Parse a date string in Spanish and return a datetime
+    :param date_string:
+    :return:
+    """
+    if date_string == "":
+        return None
+    try:
+        return parse(date_string)
+    except Exception as ex:
+        logger.warning(f"Could not parse date {date_string}")
+        return None
+
+def parse_individual(individual_element: IndividualElement)->Person:
+    """
+    Parse an individual element and return a dictionary with the following keys:
+    :param individual_element:
+    :return:
+    """
+    name = individual_element.get_name()
+    gender = individual_element.get_gender()
+    bdate, bplace, bsources = individual_element.get_birth_data()
+    ddate, dplace, dsources = individual_element.get_death_data()
+
+    bdate = parse_date(bdate)
+    ddate = parse_date(ddate)
+
+    element_parsed = {"name": unidecode.unidecode(" ".join(name).lower()),
+                      "id": individual_element.get_pointer(),
+                      "birth_date": bdate,
+                      "birth_place": bplace,
+                      "death_date": ddate,
+                      "death_place": dplace,
+                      "gender": gender
+                    }
+
+    person = Person(**element_parsed)
+    return person
+
+
+def get_edges_nodes()->Tuple[list[Person],list[Edge]]:
     # Initialize the parser
     gedcom_parser = Parser()
     # Parse your file
@@ -34,9 +123,9 @@ def get_edges_nodes():
     edges = []
     for id, element in list(list_child_elements.items()):
         if type(element) == IndividualElement:
-            if element.get_tag() in ['SUBM']:
+            if element.get_tag() in ['SUBM']: # Skip submitter
                 continue
-            nodes.append((id, {"name": " ".join(element.get_name())}))
+            nodes.append(parse_individual(element))
             count_individuals += 1
         elif type(element) == FamilyElement:
             husband_element = None
@@ -52,73 +141,33 @@ def get_edges_nodes():
                     children_individuals.append(ce)
                 elif ce.get_tag() == "MARR":
                     marriage_element = ce
+                elif ce.get_tag() in ["RIN","_UID"]: # Resource Identifier/UUID
+                    continue
+                else:
+                    logger.info(f"Unknown tag for children {ce.get_tag()}")
             if husband_element:
                 # Children point to parent
                 for children in children_individuals:
-                    edges.append((children.get_value(), husband_element.get_value(), {"type":"children"}))
+                    edges.append(Edge(source=husband_element.get_value(),
+                                      target=children.get_value(),
+                                      type=EdgeType.CHILDREN))
             if wife_element:
                 for children in children_individuals:
-                    edges.append((children.get_value(), wife_element.get_value(), {"type":"children"}))
+                    edges.append(Edge(source=wife_element.get_value(),
+                                      target=children.get_value(),
+                                      type=EdgeType.CHILDREN))
             if husband_element and wife_element:
-                edges.append((husband_element.get_value(), wife_element.get_value(), {"type":"spouse"}))
-            # Brothers edges
-            #brother_pairs = combinations(children_individuals, 2)
-            #for brother_pair in brother_pairs:
-            #    edges.append((brother_pair[0].get_value(), brother_pair[1].get_value(), {"type": "brother"}))
+                edges.append(Edge(source=husband_element.get_value(),
+                                  target=wife_element.get_value(),
+                                  type=EdgeType.SPOUSE))
+
             count_family += 1
         else:
+            logger.warning(f"Found unknown element type: {type(element)}")
             count_other += 1
 
-    print(f"I {count_individuals}, F {count_family}, O {count_other}")
-    print(f"Edges: {len(edges)} Nodes: {len(nodes)}")
+    logger.info(f"Individuals: {count_individuals}, Family: {count_family}, Others: {count_other}")
+    logger.info(f"Edges: {len(edges)} Nodes: {len(nodes)}")
     return nodes,edges
-
-# DASH attempt, cannot cope with the network size
-"""
-from typing import List, Dict
-from dash import dash
-from dash import html
-import visdcc
-
-def initialize_app(nodes, edges):
-    app = dash.Dash()
-    node_list = [{"id": node[0], "label": node[1], "shape": "dot", "size": 7} for node in nodes]
-    edge_list = [{'id': f"{edge[0][0]}--{edge[1][0]}", 'from': edge[0][0], 'to':edge[1][0], 'width':2} for edge in edges]
-    app.layout = html.Div(
-        [
-            visdcc.Network(id='net',
-                           data={'nodes': node_list, 'edges': edge_list},
-                           options={'height': '800px', 'width':'100%'})
-        ]
-    )
-    return app
-"""
-
-
-def plot_graph(G, labels):
-    import matplotlib.pyplot as plt
-    fig, ax = plt.subplots(figsize=(150,150))
-    fig.set_dpi=300
-    pos = nx.spring_layout(G, k=1/5, iterations=100)
-    # pos = nx.kamada_kawai_layout(G)
-    nx.draw_networkx_nodes(G, pos=pos, ax=ax, alpha=0.5)
-    nx.draw_networkx_edges(G, pos=pos, ax=ax, width=0.5, alpha=0.3)
-    nx.draw_networkx_labels(G, pos=pos, labels=labels, font_size=6)
-    plt.savefig("lanaja_map.png")
-
-
-if __name__ == "__main__":
-    nodes, edges = get_edges_nodes()
-    #for node in nodes[:10]:
-    #    print(node)
-    #for edge in edges[:1000]:
-    #    print(edge)
-    node_labels = {}
-    for id, label_dict in nodes:
-        node_labels[id]=label_dict['name']
-    G = nx.Graph()
-    G.add_nodes_from(nodes)
-    G.add_edges_from(edges)
-    plot_graph(G, node_labels)
 
 

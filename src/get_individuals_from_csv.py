@@ -26,10 +26,6 @@ def search_by_full_name(target_person, root_elements):
             if element.given_name_match(target_person['nombre'].strip()) and \
                 element.surname_match(target_person['apellidos'].strip()):
                     return element
-        #else:
-        #    if child_elements := element.get_child_elements():
-        #        if found_element:= search_by_full_name(target_person, child_elements):
-        #            return found_element
 
 
 def get_children(element, gedcom_parser):

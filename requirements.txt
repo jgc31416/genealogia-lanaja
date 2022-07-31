@@ -3,3 +3,6 @@ python_gedcom_2
 pygraphviz
 pydot
 matplotlib
+neo4j
+unidecode
+dateutils
