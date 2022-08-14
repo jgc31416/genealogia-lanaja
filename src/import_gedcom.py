@@ -11,7 +11,7 @@ logging.basicConfig(
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Import Gedcom file.')
-    parser.add_argument('--file', help='Gedcom file to import.')
+    parser.add_argument('--file', help='Gedcom file to import.', required=True)
 
     args = parser.parse_args()
 
