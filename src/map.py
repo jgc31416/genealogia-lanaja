@@ -4,6 +4,7 @@ Create the edges and nodes for the graph
 Gedcom tags:
 https://www.tamurajones.net/GEDCOMTags.xhtml
 """
+
 import dataclasses
 from datetime import datetime
 from enum import Enum
@@ -18,8 +19,6 @@ from python_gedcom_2.parser import Parser
 import logging
 logger = logging.getLogger()
 
-# Path to your ".ged" file
-gen_file_path = '../data/Lanaja_2021_v4.ged'
 
 
 @dataclasses.dataclass
@@ -109,7 +108,7 @@ def parse_individual(individual_element: IndividualElement)->Person:
     return person
 
 
-def get_edges_nodes()->Tuple[list[Person],list[Edge]]:
+def get_edges_nodes(gen_file_path: str) -> Tuple[list[Person],list[Edge]]:
     # Initialize the parser
     gedcom_parser = Parser()
     # Parse your file
